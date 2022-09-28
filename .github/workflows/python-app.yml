@@ -6,8 +6,6 @@ name: Python application
 on:
   push:
     branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
 
 permissions:
   contents: read
@@ -35,5 +33,5 @@ jobs:
     - uses: ncipollo/release-action@v1
       with:
         artifacts: "dist/easy_cal.exe"
-        token: ${{ secrets.GITHUB_TOKEN }}
+        token: ${{ secrets.TOKEN }}
 
