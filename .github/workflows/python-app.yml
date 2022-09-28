@@ -33,7 +33,7 @@ jobs:
         with:
           type: 'zip'
           filename: 'easy_cal.zip'
-          exclusions: 'config.ini dist/easy_cal.exe'
+          path: 'config.ini dist/easy_cal.exe'
 
       - name: Create Release
         uses: ncipollo/release-action@v1
