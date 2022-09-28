@@ -27,13 +27,14 @@ jobs:
           pip install pipreqs pyinstaller
           pipreqs . && pip install -r requirements.txt
           pyinstaller -i icon.ico -F easy_cal.py
+          cp dist/easy_cal.exe .
 
       - name: Archive Release
         uses: thedoctor0/zip-release@main
         with:
           type: 'zip'
           filename: 'easy_cal.zip'
-          path: 'config.ini dist/easy_cal.exe'
+          path: 'config.ini easy_cal.exe'
 
       - name: Create Release
         uses: ncipollo/release-action@v1
