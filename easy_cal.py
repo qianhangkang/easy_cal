@@ -11,7 +11,6 @@ import time
 import traceback
 from concurrent.futures import ProcessPoolExecutor, wait, ALL_COMPLETED
 from decimal import *
-from numpy import sum
 
 DEFAULT = 'DEFAULT'
 KEY = 'key'
@@ -230,7 +229,7 @@ def calculate_single_csv(config: dict, filename: str, first_csv_header: list) ->
                     temp_res_dict[key] = row_need_cal
                 else:
                     decimal_list = temp_res_dict[key]
-                    temp_res_dict[key] = sum([decimal_list, row_need_cal], axis=0).tolist()
+                    temp_res_dict[key] = [i + j for i, j in zip(decimal_list, row_need_cal)]
 
         # sort by key and convert decimal to str for saving to csv
         res = {}
