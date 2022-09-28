@@ -361,4 +361,4 @@ if __name__ == '__main__':
         main()
     except Exception:
         traceback.print_exc()
-        os.system('pause')
+        input()
