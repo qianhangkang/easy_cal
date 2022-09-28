@@ -74,7 +74,7 @@ jobs:
           pyinstaller -i icon.ico -F easy_cal.py
 
       - name: Create Release
-      - uses: ncipollo/release-action@v1
+        uses: ncipollo/release-action@v1
         with:
           artifacts: "dist/easy_cal.exe"
           token: ${{ secrets.TOKEN }}
