@@ -77,4 +77,4 @@ jobs:
         with:
           artifacts: "dist/easy_cal.exe"
           token: ${{ secrets.TOKEN }}
-          tag: ${{ github.ref_name }}
+          tag: ${{ github.run_id }}
