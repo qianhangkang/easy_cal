@@ -55,7 +55,6 @@ permissions:
 
 jobs:
   build:
-
     runs-on: windows-latest
 
     steps:
