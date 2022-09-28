@@ -268,7 +268,9 @@ def summary_output_csv_file(config: dict, first_csv_header: list):
     print(f'\n')
     print(f'{get_flair(RIGHT)} 正在生成最终的汇总文件...')
     summary_path = f'{config[OUTPUT_FOLDER_NAME]}/{DEFAULT_OUTPUT_SUMMARY_NAME}'
-    output_csv_filename_list = sorted(os.listdir(config[OUTPUT_FOLDER_NAME]))
+    # 排除已有的summary.csv
+    output_csv_filename_list = [x for x in sorted(os.listdir(config[OUTPUT_FOLDER_NAME])) if
+                                DEFAULT_OUTPUT_SUMMARY_NAME not in x]
     # 生成汇总文件的header
     # 文件名称-{维度}-{计算列数}
     h1 = ['文件名称']
@@ -361,4 +363,4 @@ if __name__ == '__main__':
         main()
     except Exception:
         traceback.print_exc()
-        input()
+    os.system('pause')
