@@ -72,9 +72,17 @@ jobs:
           pipreqs . && pip install -r requirements.txt
           pyinstaller -i icon.ico -F easy_cal.py
 
+    - name: Archive Release
+      uses: thedoctor0/zip-release@main
+      with:
+        type: 'zip'
+        filename: 'easy_cal.zip'
+        exclusions: 'config.ini dist/easy_cal.exe'
+
       - name: Create Release
         uses: ncipollo/release-action@v1
         with:
-          artifacts: "dist/easy_cal.exe"
+          artifacts: "easy_cal.zip"
           token: ${{ secrets.TOKEN }}
+          name: ${{ github.run_id }}
           tag: ${{ github.run_id }}
