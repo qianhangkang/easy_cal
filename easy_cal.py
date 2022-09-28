@@ -335,12 +335,15 @@ def print_csv_files(csv_filename_list: list):
     for filename in csv_filename_list:
         print(f'{filename}')
     print(get_flair(UP))
+    print(f'一共{len(csv_filename_list)}个文件')
     pass
 
 
 def main():
     config = read_config()
     csv_filename_list = scan_csv_file()
+    if len(csv_filename_list) == 0:
+        raise Exception(f'当前目录下不存在csv文件')
     first_file_name = csv_filename_list[0]
     print_csv_files(csv_filename_list)
     csv_header = load_csv_header(config, f'{first_file_name}')
