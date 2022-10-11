@@ -5,6 +5,8 @@ name: Python application
 on:
   push:
     branches: [ "main" ]
+    tags:
+      - '*'
 
 permissions:
   contents: read
@@ -41,6 +43,5 @@ jobs:
         with:
           artifacts: "easy_cal.zip"
           token: ${{ secrets.TOKEN }}
-          name: ${{ github.run_id }}
-          tag: ${{ github.run_id }}
-          draft: true
+#          name: ${{ github.run_id }}
+#          tag: ${{ github.run_id }}

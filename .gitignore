@@ -136,3 +136,4 @@ output*
 # custom file
 async_easy_cal.py
 requirements.txt
+.DS_Store
