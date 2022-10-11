@@ -12,6 +12,8 @@ import traceback
 from concurrent.futures import ProcessPoolExecutor, wait, ALL_COMPLETED
 from decimal import *
 
+from chardet import detect, UniversalDetector
+
 DEFAULT = 'DEFAULT'
 KEY = 'key'
 COLUMN = 'column'
@@ -20,48 +22,41 @@ UP = 'up'
 DOWN = 'down'
 RIGHT = 'right'
 LEFT = 'left'
-EXPLODE = 'explode'
 OUTPUT_FOLDER_NAME = 'output_folder_name'
 PERFORMANCE = 'performance'
 KEEP_COMPUTE_FILE = 'keep_compute_file'
 
-USE_FLAIR = 'diamond'
+USE_FLAIR = 'right'
 CONFIG_NAME = 'config.ini'
-DEFAULT_ENCODING = 'gbk'
+# 自动识别编码
+DEFAULT_ENCODING = 'auto'
 DEFAULT_OUTPUT_FOLDER_NAME = 'output'
 DEFAULT_OUTPUT_SUMMARY_NAME = 'summary.csv'
-DEFAULT_PERFORMANCE = 5
+DEFAULT_PERFORMANCE = 10
 DEFAULT_KEEP_COMPUTE_FILE = 0
+
+
+def get_encoding(file):
+    with open(file, 'rb') as f:
+        detector = UniversalDetector()
+        for line in f.readlines():
+            detector.feed(line)
+            if detector.done: break
+        detector.close()
+        encoding = detector.result['encoding']
+        if 'gb' in encoding.lower():
+            return 'gbk'
+        if 'utf' in encoding.lower():
+            return 'utf-8'
+        return encoding
 
 
 def get_flair(flag=USE_FLAIR) -> str:
     flair = {
-        "rocket": "(🚀🚀)",
-        "diamond": "(💎💎💎)",
-        "stars": "(✨✨)",
-        "baseball": "(⚾)",
-        "boat": "(⛵)",
-        "phone": "(☎)",
-        "mercury": "(☿)",
-        "sun": "(☼)",
-        "moon": "(☾)",
-        "nuke": "(☢)",
-        "hazard": "(☣)",
-        "tunder": "(☈)",
-        "king": "(♔)",
-        "queen": "(♕)",
-        "knight": "(♘)",
-        "recycle": "(♻)",
-        "scales": "(⚖)",
-        "ball": "(⚽)",
-        "golf": "(⛳)",
-        "piece": "(☮)",
-        "yy": "(☯)",
-        "up": "👆👆👆",
-        "down": "👇👇👇",
-        "right": "👉",
-        "left": "👈",
-        "explode": "💥💥💥"
+        "up": "↑ ↑ ↑",
+        "down": "↓ ↓ ↓",
+        "right": " → ",
+        "left": " ← "
     }
 
     return flair[flag]
@@ -184,12 +179,15 @@ def print_config(user_config: dict, csv_header: list):
     print(f'计算的列数：{origin_user_column_list}')
     match_header_column_list = [csv_header[x - 1] for x in origin_user_column_list]
     print(f'对应的header：{match_header_column_list}')
-    print(f'读取文件的编码格式：{user_config[ENCODING]}')
+    encoding = user_config[ENCODING]
+    if user_config['auto'] == 1:
+        encoding = encoding + '（自动识别）'
+    print(f'读取文件的编码格式：{encoding}')
     output_folder_name = user_config[OUTPUT_FOLDER_NAME]
     print(f'输出的文件夹名称：{output_folder_name}')
     keep = '保留' if user_config[KEEP_COMPUTE_FILE] else '不保留'
     print(f'是否保留对应单个计算文件：{keep}')
-    print(f'性能强度：{user_config[PERFORMANCE]}')
+    # print(f'性能强度：{user_config[PERFORMANCE]}')
     print(get_flair(UP))
 
 
@@ -247,7 +245,7 @@ def write_result_to_csv_file(config: dict, result: dict, filename: str, first_cs
         print(f'{get_flair(RIGHT)} 开始写入对应文件{filename}的汇总文件...')
     path = f'{config[OUTPUT_FOLDER_NAME]}/{filename}'
     target_header = [first_csv_header[x] for x in config[KEY]] + [first_csv_header[x] for x in config[COLUMN]]
-    with open(path, 'w', encoding=config[ENCODING], newline='') as f:
+    with open(path, 'w', encoding='utf-8', newline='') as f:
         writer = csv.writer(f)
         writer.writerow(target_header)
         rows = generate_rows(result)
@@ -265,9 +263,9 @@ def calculate_and_write(config: dict, filename: str, first_csv_header: list):
 
 
 def summary_output_csv_file(config: dict, first_csv_header: list):
-    print(f'\n')
-    print(f'{get_flair(RIGHT)} 正在生成最终的汇总文件...')
     summary_path = f'{config[OUTPUT_FOLDER_NAME]}/{DEFAULT_OUTPUT_SUMMARY_NAME}'
+    print(f'\n')
+    print(f'{get_flair(RIGHT)} 正在生成最终的汇总文件 {summary_path}...')
     # 排除已有的summary.csv
     output_csv_filename_list = [x for x in sorted(os.listdir(config[OUTPUT_FOLDER_NAME])) if
                                 DEFAULT_OUTPUT_SUMMARY_NAME not in x]
@@ -277,13 +275,13 @@ def summary_output_csv_file(config: dict, first_csv_header: list):
     h2 = [first_csv_header[x] for x in config[KEY]]
     h3 = [first_csv_header[x] for x in config[COLUMN]]
     summary_header = h1 + h2 + h3
-    with open(summary_path, 'w', encoding=config[ENCODING], newline='') as s:
+    with open(summary_path, 'w', encoding='utf-8', newline='') as s:
         summary_writer = csv.writer(s)
         summary_writer.writerow(summary_header)
         # s.flush()
 
         for output_csv_filename in output_csv_filename_list:
-            with open(f'{config[OUTPUT_FOLDER_NAME]}/{output_csv_filename}', 'rt', encoding=config[ENCODING]) as c:
+            with open(f'{config[OUTPUT_FOLDER_NAME]}/{output_csv_filename}', 'rt', encoding='utf-8') as c:
                 reader = csv.reader(c)
                 next(reader)
                 rows = [[output_csv_filename] + row for row in reader]
@@ -294,24 +292,15 @@ def summary_output_csv_file(config: dict, first_csv_header: list):
         for output_csv_filename in output_csv_filename_list:
             os.remove(f'{config[OUTPUT_FOLDER_NAME]}/{output_csv_filename}')
 
-    print(f'{get_flair(EXPLODE)} ENJOY {get_flair(EXPLODE)}')
-
-
-def serial_compute(config: dict, csv_filename_list: list, first_csv_header: list):
-    start_time = time.time()
-    print('\n')
-    print(f'{get_flair(RIGHT)} 开始串行执行...')
-    for filename in csv_filename_list:
-        calculate_and_write(config, filename, first_csv_header)
-    summary_output_csv_file(config, first_csv_header)
-    end_time = time.time()
-    print("耗时: {:.2f}秒".format(end_time - start_time))
+    print(f'{get_flair(RIGHT)} ENJOY {get_flair(LEFT)}')
 
 
 def multi_compute(config: dict, csv_filename_list: list, first_csv_header: list):
     start_time = time.time()
     print('\n')
     max_workers = int(os.cpu_count() * config[PERFORMANCE] / 10) or 1
+    if max_workers > len(csv_filename_list):
+        max_workers = len(csv_filename_list)
     print(f'{get_flair(RIGHT)} 启动进程数：{max_workers}...')
     with ProcessPoolExecutor(max_workers=max_workers) as pool:
         task_handle = [pool.submit(calculate_and_write, config, filename, first_csv_header) for filename in
@@ -339,12 +328,23 @@ def print_csv_files(csv_filename_list: list):
     pass
 
 
+def set_actually_encoding(config: dict, first_file_name: str):
+    e = config[ENCODING]
+    if e == 'auto':
+        a = get_encoding(first_file_name)
+        config[ENCODING] = a
+        config['auto'] = 1
+    else:
+        config['auto'] = 0
+
+
 def main():
     config = read_config()
     csv_filename_list = scan_csv_file()
     if len(csv_filename_list) == 0:
         raise Exception(f'当前目录下不存在csv文件')
     first_file_name = csv_filename_list[0]
+    set_actually_encoding(config, first_file_name)
     print_csv_files(csv_filename_list)
     csv_header = load_csv_header(config, f'{first_file_name}')
     print_header(csv_header)
@@ -354,10 +354,7 @@ def main():
     if not os.path.exists(config[OUTPUT_FOLDER_NAME]):
         os.mkdir(config[OUTPUT_FOLDER_NAME])
 
-    if config[PERFORMANCE] > 0:
-        multi_compute(config, csv_filename_list, csv_header)
-    else:
-        serial_compute(config, csv_filename_list, csv_header)
+    multi_compute(config, csv_filename_list, csv_header)
 
 
 if __name__ == '__main__':
