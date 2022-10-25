@@ -4,7 +4,7 @@ name: Python application
 
 on:
   push:
-    branches: [ "main" ]
+#    branches: [ "main" ]
     tags:
       - '*'
 
