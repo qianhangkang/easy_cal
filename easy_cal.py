@@ -12,7 +12,8 @@ import traceback
 from concurrent.futures import ProcessPoolExecutor, wait, ALL_COMPLETED
 from decimal import *
 
-from chardet import detect, UniversalDetector
+import xlrd
+from chardet import UniversalDetector
 
 DEFAULT = 'DEFAULT'
 KEY = 'key'
@@ -30,10 +31,12 @@ USE_FLAIR = 'right'
 CONFIG_NAME = 'config.ini'
 # 自动识别编码
 DEFAULT_ENCODING = 'auto'
+DEFAULT_ENCODING_UTF8 = 'utf-8'
 DEFAULT_OUTPUT_FOLDER_NAME = 'output'
 DEFAULT_OUTPUT_SUMMARY_NAME = 'summary.csv'
 DEFAULT_PERFORMANCE = 10
 DEFAULT_KEEP_COMPUTE_FILE = 0
+SUPPORT_FILE = ('.csv', '.xlsx')
 
 
 def get_encoding(file):
@@ -44,6 +47,9 @@ def get_encoding(file):
             if detector.done: break
         detector.close()
         encoding = detector.result['encoding']
+        if encoding is None:
+            print(f'无法识别文件{file}的编码，尝试使用utf-8读取')
+            return 'gbk'
         if 'gb' in encoding.lower():
             return 'gbk'
         if 'utf' in encoding.lower():
@@ -139,16 +145,27 @@ def check_config(user_config: dict, csv_header: list) -> None:
     print_config(user_config, csv_header)
 
 
-def scan_csv_file() -> list:
+def get_file_suffix(filename: str):
+    return os.path.splitext(filename.lower())[-1]
+
+
+def scan_input_file() -> list:
     origin_csv_list = sorted(os.listdir())
-    return [x for x in origin_csv_list if '.csv' in x]
+    return [x for x in origin_csv_list if get_file_suffix(x) in SUPPORT_FILE]
 
 
-def load_csv_header(config: dict, csv_path) -> list:
-    with open(csv_path, 'rt', encoding=config[ENCODING]) as c:
-        reader = csv.reader(c)
-        header = next(reader)
-        return header
+def load_file_header(config: dict, csv_path) -> list:
+    if '.csv' in csv_path.lower():
+        with open(csv_path, 'rt', encoding=config[ENCODING]) as c:
+            reader = csv.reader(c)
+            header = next(reader)
+            return header
+    elif '.xlsx' in csv_path.lower():
+        workbook = xlrd.open_workbook('origin/test.XLSX')
+        sheet = workbook.sheet_by_index(0)
+        return sheet.row_values(0)
+    else:
+        raise Exception(f'暂不支持文件{csv_path}的类型')
 
 
 def confirm():
@@ -160,7 +177,7 @@ def confirm():
 
 def print_header(csv_header):
     print('\n')
-    print('以下是第一个csv文件的header，确保所有csv文件header一致')
+    print('以下是第一个文件的header，确保所有文件header一致')
     print(get_flair(DOWN))
     print(csv_header)
     print(get_flair(UP))
@@ -209,6 +226,50 @@ def check_header(filename: str, header: list, first_csv_header: list):
                 f'文件{filename}的header中，第{index + 1}列{header[index]}与第一个csv头文件的值{first_csv_header[index]}不相等')
 
 
+def convert_to_decimal(number) -> Decimal:
+    s = str(number)
+    try:
+        return Decimal(s)
+    except Exception:
+        return Decimal(0)
+
+
+def __parse_row_and_write_to_dict(config: dict, row: list, temp_res_dict: dict):
+    key = "-".join([str(row[x]) for x in config[KEY]])
+    row_need_cal = [convert_to_decimal(row[x]) for x in config[COLUMN]]
+    if key not in temp_res_dict.keys():
+        temp_res_dict[key] = row_need_cal
+    else:
+        decimal_list = temp_res_dict[key]
+        temp_res_dict[key] = [i + j for i, j in zip(decimal_list, row_need_cal)]
+
+
+def calculate_single_xlsx(config: dict, filename: str, first_csv_header: list) -> dict:
+    print(f'{get_flair(RIGHT)} 开始计算文件{filename}...')
+    temp_res_dict = {}
+    try:
+        workbook = xlrd.open_workbook('origin/test.XLSX')
+        sheet = workbook.sheet_by_index(0)
+        for index in range(sheet.nrows):
+            row = sheet.row_values(index)
+            # header检查
+            if index == 0:
+                header = row
+                check_header(filename, header, first_csv_header)
+            else:
+                __parse_row_and_write_to_dict(config, row, temp_res_dict)
+
+        # sort by key and convert decimal to str for saving to csv
+        res = {}
+        for key in sorted(list(temp_res_dict.keys())):
+            res[key] = [str(x) for x in temp_res_dict[key]]
+        return res
+    except Exception:
+        print(f'计算文件{filename}出现异常，异常如下请检查')
+        traceback.print_exc()
+        raise Exception
+
+
 def calculate_single_csv(config: dict, filename: str, first_csv_header: list) -> dict:
     print(f'{get_flair(RIGHT)} 开始计算文件{filename}...')
     temp_res_dict = {}
@@ -221,13 +282,7 @@ def calculate_single_csv(config: dict, filename: str, first_csv_header: list) ->
             check_header(filename, header, first_csv_header)
 
             for index, row in enumerate(reader):
-                key = "-".join([str(row[x]) for x in config[KEY]])
-                row_need_cal = [Decimal(row[x]) for x in config[COLUMN]]
-                if key not in temp_res_dict.keys():
-                    temp_res_dict[key] = row_need_cal
-                else:
-                    decimal_list = temp_res_dict[key]
-                    temp_res_dict[key] = [i + j for i, j in zip(decimal_list, row_need_cal)]
+                __parse_row_and_write_to_dict(config, row, temp_res_dict)
 
         # sort by key and convert decimal to str for saving to csv
         res = {}
@@ -254,10 +309,15 @@ def write_result_to_csv_file(config: dict, result: dict, filename: str, first_cs
         f.flush()
 
 
-def calculate_and_write(config: dict, filename: str, first_csv_header: list):
+def calculate_and_write(config: dict, filename: str, first_file_header: list):
     try:
-        res = calculate_single_csv(config, filename, first_csv_header)
-        write_result_to_csv_file(config, res, filename, first_csv_header)
+        if '.csv' in get_file_suffix(filename):
+            res = calculate_single_csv(config, filename, first_file_header)
+        elif '.xlsx' in get_file_suffix(filename):
+            res = calculate_single_xlsx(config, filename, first_file_header)
+        else:
+            raise Exception(f'暂不支持文件{filename}的格式')
+        write_result_to_csv_file(config, res, filename, first_file_header)
     except Exception:
         traceback.print_exc()
 
@@ -295,7 +355,7 @@ def summary_output_csv_file(config: dict, first_csv_header: list):
     print(f'{get_flair(RIGHT)} ENJOY {get_flair(LEFT)}')
 
 
-def multi_compute(config: dict, csv_filename_list: list, first_csv_header: list):
+def multi_compute(config: dict, csv_filename_list: list, first_file_header: list):
     start_time = time.time()
     print('\n')
     max_workers = int(os.cpu_count() * config[PERFORMANCE] / 10) or 1
@@ -303,58 +363,64 @@ def multi_compute(config: dict, csv_filename_list: list, first_csv_header: list)
         max_workers = len(csv_filename_list)
     print(f'{get_flair(RIGHT)} 启动进程数：{max_workers}...')
     with ProcessPoolExecutor(max_workers=max_workers) as pool:
-        task_handle = [pool.submit(calculate_and_write, config, filename, first_csv_header) for filename in
+        task_handle = [pool.submit(calculate_and_write, config, filename, first_file_header) for filename in
                        csv_filename_list]
     print(f'{get_flair(RIGHT)} 请等待所有计算任务完成...')
     wait(task_handle, return_when=ALL_COMPLETED)
-    summary_output_csv_file(config, first_csv_header)
+    summary_output_csv_file(config, first_file_header)
     end_time = time.time()
     print("耗时: {:.2f}秒".format(end_time - start_time))
 
 
-def print_csv_files(csv_filename_list: list):
+def print_calculate_files(calculate_filename_list: list):
     print('\n')
     print(get_flair(DOWN))
-    print('1、请将该脚本和配置文件放在待计算的csv文件夹下')
-    print('2、请确保csv文件名以.csv结尾')
-    print('3、请确保所有csv的格式（如header，编码格式等）一致')
+    print('1、请将该脚本和配置文件放在待计算的文件夹下')
+    print('2、请确保csv文件名以.csv结尾，excel文件以xlsx结尾')
+    print('3、请确保所有csv、excel文件格式（如header，编码格式等）一致。header代表文件第一行的内容')
     print(get_flair(UP))
-    print(f'\n以下是待计算的csv文件')
+    print(f'\n以下是待计算的文件')
     print(get_flair(DOWN))
-    for filename in csv_filename_list:
+    for filename in calculate_filename_list:
         print(f'{filename}')
     print(get_flair(UP))
-    print(f'一共{len(csv_filename_list)}个文件')
+    print(f'共{len(calculate_filename_list)}个文件')
     pass
 
 
-def set_actually_encoding(config: dict, first_file_name: str):
+def auto_set_csv_encoding(config: dict, calculate_filename_list: list):
     e = config[ENCODING]
-    if e == 'auto':
-        a = get_encoding(first_file_name)
-        config[ENCODING] = a
+    csv_file_list = [x for x in calculate_filename_list if '.csv' in x]
+    if len(csv_file_list) == 0:
+        config[ENCODING] = DEFAULT_ENCODING_UTF8
         config['auto'] = 1
     else:
-        config['auto'] = 0
+        if e == 'auto':
+            # 以第一个csv文件的编码格式为标准，全部以这个格式读取
+            a = get_encoding(csv_file_list[0])
+            config[ENCODING] = a
+            config['auto'] = 1
+        else:
+            config['auto'] = 0
 
 
 def main():
     config = read_config()
-    csv_filename_list = scan_csv_file()
-    if len(csv_filename_list) == 0:
-        raise Exception(f'当前目录下不存在csv文件')
-    first_file_name = csv_filename_list[0]
-    set_actually_encoding(config, first_file_name)
-    print_csv_files(csv_filename_list)
-    csv_header = load_csv_header(config, f'{first_file_name}')
-    print_header(csv_header)
-    check_config(config, csv_header)
+    calculate_filename_list = scan_input_file()
+    if len(calculate_filename_list) == 0:
+        raise Exception(f'当前目录下不存在{SUPPORT_FILE}文件')
+    first_file_name = calculate_filename_list[0]
+    auto_set_csv_encoding(config, calculate_filename_list)
+    print_calculate_files(calculate_filename_list)
+    first_file_header = load_file_header(config, first_file_name)
+    print_header(first_file_header)
+    check_config(config, first_file_header)
     print(f'\n{get_flair(RIGHT) * 3}请确认以上待计算文件、配置信息{get_flair(LEFT) * 3}')
     confirm()
     if not os.path.exists(config[OUTPUT_FOLDER_NAME]):
         os.mkdir(config[OUTPUT_FOLDER_NAME])
 
-    multi_compute(config, csv_filename_list, csv_header)
+    multi_compute(config, calculate_filename_list, first_file_header)
 
 
 if __name__ == '__main__':
