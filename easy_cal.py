@@ -161,7 +161,7 @@ def load_file_header(config: dict, csv_path) -> list:
             header = next(reader)
             return header
     elif '.xlsx' in csv_path.lower():
-        workbook = xlrd.open_workbook('origin/test.XLSX')
+        workbook = xlrd.open_workbook(csv_path)
         sheet = workbook.sheet_by_index(0)
         return sheet.row_values(0)
     else:
@@ -248,7 +248,7 @@ def calculate_single_xlsx(config: dict, filename: str, first_csv_header: list) -
     print(f'{get_flair(RIGHT)} 开始计算文件{filename}...')
     temp_res_dict = {}
     try:
-        workbook = xlrd.open_workbook('origin/test.XLSX')
+        workbook = xlrd.open_workbook(filename)
         sheet = workbook.sheet_by_index(0)
         for index in range(sheet.nrows):
             row = sheet.row_values(index)
