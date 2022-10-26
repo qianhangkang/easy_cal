@@ -150,8 +150,15 @@ def get_file_suffix(filename: str):
 
 
 def scan_input_file() -> list:
-    origin_csv_list = sorted(os.listdir())
-    return [x for x in origin_csv_list if get_file_suffix(x) in SUPPORT_FILE]
+    origin_file_list = [x for x in os.listdir() if get_file_suffix(x) in SUPPORT_FILE]
+    # 根据文件大小升序排序方便获取第一个文件的header，否则xlsx大文件速度太慢
+    file_size_dict = {}
+    for filename in origin_file_list:
+        file_size_dict[filename] = os.path.getsize(filename)
+
+    # 对字典按value排序
+    a = sorted(file_size_dict.items(), key=lambda x: x[1], reverse=False)
+    return [x[0] for x in a]
 
 
 def load_file_header(config: dict, csv_path) -> list:
